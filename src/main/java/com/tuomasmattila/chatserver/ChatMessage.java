@@ -4,27 +4,24 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
+/**
+ * A class that represents a chat message. The class can hold
+ * the time the message was sent as an {@code OffsetDateTime}, 
+ * the name of the message's sender as {@code String} and the 
+ * message itself as a {@code String}
+ */
 public class ChatMessage {
 
     private OffsetDateTime sent;
     private String nick;
     private String message;
 
-    /**
-     * 
-     */
     public ChatMessage() {
         this.nick = "";
         this.message = "";
         this.sent = null;
     }
 
-    /**
-     * 
-     * @param sent
-     * @param nick
-     * @param message
-     */
     public ChatMessage(OffsetDateTime sent, String nick, String message) {
         this.nick = nick;
         this.message = message;
@@ -32,65 +29,43 @@ public class ChatMessage {
     }
 
     /**
-     * This is used for storing timestamps to the database in unix format.
-     * @return
+     * Converts {@code OffsetDateTime} to {@code long} integer, making it
+     * an unix timestamp with milliseconds.
+     * 
+     * @return the timestamp in Unix time with milliseconds
      */
     public long dateAsInt() {  
         return sent.toInstant().toEpochMilli(); 
     }
     
     /**
-     * This is used in handling GET requests. The method converts unix timestamps to UTC time.
-     * @param epoch
+     * Converts {@code long} integers (unix timestamps) to {@code OffsetDateTime}.
+     * @param epoch the timestamp in unix format ({@code long})
      */
     public void setSent(long epoch) { 
         sent = OffsetDateTime.ofInstant(Instant.ofEpochMilli(epoch), ZoneOffset.UTC); 
     }
     
-    /**
-     * 
-     * @param sent
-     */
     public void setSent(OffsetDateTime sent) {
         this.sent = sent;
     }
 
-    /**
-     * 
-     * @param nick
-     */
     public void setNick(String nick) {
         this.nick = nick;
     }
 
-    /**
-     * 
-     * @param message
-     */
     public void setMessage(String message) {
         this.message = message;
     }
 
-    /**
-     * 
-     * @return
-     */
     public OffsetDateTime getSent() {
         return this.sent;
     }
 
-    /**
-     * 
-     * @return
-     */
     public String getNick() {
         return this.nick;
     }
 
-    /**
-     * 
-     * @return
-     */
     public String getMessage() {
         return this.message;
     }

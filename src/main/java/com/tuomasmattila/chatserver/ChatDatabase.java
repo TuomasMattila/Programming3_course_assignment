@@ -13,6 +13,12 @@ import org.apache.commons.codec.digest.Crypt;
 
 import java.sql.ResultSet;
 
+/**
+ * A class for managing a SQLite database. This database is used for storing
+ * users' usernames, passwords and emails and information about messages sent
+ * to the database. Message information contains the name of the sender, the
+ * message itself and the time it was sent.
+ */
 public class ChatDatabase {
 
     private static ChatDatabase singleton = null;
@@ -20,8 +26,11 @@ public class ChatDatabase {
     private static SecureRandom secureRandom = new SecureRandom();
 
     /**
+     * Used for getting an instance of the database. For example, if we want 
+     * to insert a message to the database, we have to call 
+     * {@code ChatDatabase.getInstance().insertMessage(ChatMessage)}.
      * 
-     * @return
+     * @return the singleton of the database
      */
     public static synchronized ChatDatabase getInstance() {
         if (null == singleton) {
@@ -30,17 +39,17 @@ public class ChatDatabase {
         return singleton;
     }
 
-    /**
-     * 
-     */
     private ChatDatabase() {
-
     }
 
     /**
+     * Initializes the connection to the database. 
+     * If the database file did not exist yet, the database will be initialized too
+     * using the {@code initializeDatabase(Connection dbConnection)} method.
      * 
-     * @param dbName
-     * @throws SQLException
+     * @param dbName the name of the database file including the full path to it
+     * @throws SQLException if the attempt to establish a connection to the given 
+     * database URL fails or if a database access error occurs
      */
     public void open(String dbName) throws SQLException {
         File tempfile = new File(dbName);
@@ -50,11 +59,7 @@ public class ChatDatabase {
             isFileOrDir = true;
         }
         String JDBCConnectionAddress = "jdbc:sqlite:" + dbName;
-        try {
-            dbConnection = DriverManager.getConnection(JDBCConnectionAddress);
-        } catch (SQLException e) {
-            ChatServer.log(e.getMessage());
-        }
+        dbConnection = DriverManager.getConnection(JDBCConnectionAddress);
         ChatServer.log("Connected to the database.");
         if (isFileOrDir == false) {
             ChatServer.log("Initializing database...");
@@ -63,25 +68,32 @@ public class ChatDatabase {
     }
 
     /**
+     * Initializes the database. Creates two tables: users and messages.
+     * The users table can hold information about users' usernames, passwords
+     * and emails (all have to be {@code String} type). The messages table can 
+     * hold information about messages, including the senders, messages and 
+     * timestamps ({@code long}) of the messages. Timestamps must be stored 
+     * in an unix format that includes milliseconds.
      * 
-     * @param dbConnection
+     * @param dbConnection A {@code Connection} object; A connection (session) with a 
+     * specific database. SQL statements are executed and results are returned 
+     * within the context of a connection
+     * @throws SQLException if a database access error occurs
      */
-    public void initializeDatabase(Connection dbConnection) {
-        try {
+    public void initializeDatabase(Connection dbConnection) throws SQLException {
             Statement createStatement = dbConnection.createStatement();
             createStatement.execute("create table users (username varchar(50) PRIMARY KEY, password varchar(100) NOT NULL, salt varchar(100) NOT NULL, email varchar(100) NOT NULL)");
             createStatement.execute("create table messages (user varchar(50) NOT NULL, message varchar(255) NOT NULL, sent integer NOT NULL, PRIMARY KEY(user, sent), FOREIGN KEY(user) REFERENCES users(username))");
             createStatement.close();
             ChatServer.log("Database successfully initialized.");
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
     }
 
     /**
+     * Inserts user information to the database.
+     * Passwords are hashed before storing them top the database.
      * 
-     * @param user
-     * @return
+     * @param user An {@code User} object containing username, password and email
+     * @return {@code true} if registration was successful, otherwise {@code false}
      */
     public boolean insertUser(User user) {
         String query = "select count(*) from users where username='" + user.getUsername() + "'";
@@ -105,16 +117,19 @@ public class ChatDatabase {
                 return true;
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            ChatServer.log(e.getMessage());
             return false;
         }
     }
 
     /**
+     * Checks whether the user trying to make requests is a valid user in the database.
      * 
-     * @param username
-     * @param password
-     * @return
+     * @param username username provided by the client that the method searches 
+     * for in the database
+     * @param password password provided by the client that is compared to the 
+     * hashed password in the database
+     * @return {@code true} if validating user was successful, otherwise returns {@code false}
      */
     public boolean validateUser(String username, String password) {
         String query = "select password from users where username='" + username + "'";
@@ -153,27 +168,29 @@ public class ChatDatabase {
     }
 
     /**
+     * Method for inserting a message to the database
      * 
-     * @param message
+     * @param message A {@code ChatMessage} object to be inserted into the database
+     * @throws SQLException if a database access error occurs or this method 
+     * is called on a closed connection
      */
     public void insertMessage(ChatMessage message) throws SQLException{
-        //String msg = message.getMessage();
-        //msg = msg.replaceAll("\"", "''"); // Handles quotes, find a better solution if you can
-        //String insert = "insert into messages values (\"" + message.getNick() + "\", \"" + msg + "\", " + message.dateAsInt() + ")";
-        String insert = "insert into messages values (\"" + message.getNick() + "\", \"" + message.getMessage() + "\", " + message.dateAsInt() + ")";
-        
-        try {
-            Statement insertStatement = dbConnection.createStatement();
-            insertStatement.executeUpdate(insert);
-            insertStatement.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        String msg = message.getMessage();
+        msg = msg.replaceAll("\"", "''"); // Handles quotes
+        String insert = "insert into messages values (\"" + message.getNick() + "\", \"" + msg + "\", " + message.dateAsInt() + ")";
+
+        Statement insertStatement = dbConnection.createStatement();
+        insertStatement.executeUpdate(insert);
+        insertStatement.close();
     }
 
     /**
+     * Method for getting messages from the database.
      * 
-     * @return
+     * @param since {@code long} int that defines the timestamp from which point onwards this 
+     * method should get the messages. If -1, this method returns the last 20 messages
+     * @return messages in an {@code ArrayList<ChatMessage>} or {@code null} if an 
+     * exception occurs
      */
     public ArrayList<ChatMessage> getMessages(long since) {
         String query = "";
@@ -201,14 +218,15 @@ public class ChatDatabase {
                 return messages;
             }
         } catch (SQLException e) {
-            ChatServer.log("SQLite error: no such table: messages");
+            ChatServer.log(e.getMessage());
             return null;
         }
     }
 
     /**
+     * Method that returns the number of messages stored in the database.
      * 
-     * @return
+     * @return the number of messages in the database or 0 if an exception occurs
      */
     public int numberOfMessages() {
         String query = "select count(*) from messages";
@@ -219,14 +237,16 @@ public class ChatDatabase {
             queryStatement.close();
             return count;
         } catch (SQLException e) {
-            ChatServer.log("SQLite error: no such table: messages");
+            ChatServer.log(e.getMessage());
             return 0;
         }
     }
 
     /**
+     * Checks whether the database does not have any messages in it.
      * 
-     * @return
+     * @return {@code true} if there are no messages in the database, 
+     * {@code false} otherwise
      */
     public boolean isEmpty() {
         String query = "select count(*) from messages";
@@ -241,18 +261,19 @@ public class ChatDatabase {
                 return true;
             }
         } catch (SQLException e) {
-            ChatServer.log("SQLite error: no such table: messages");
+            ChatServer.log(e.getMessage());
             return true;
         }
     }
 
-    public void close() {
-        try {
-            dbConnection.close();
-            ChatServer.log("Database closed.");
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    /**
+     * Closes the connection to the database.
+     * 
+     * @throws SQLException if a database access error occurs
+     */
+    public void close() throws SQLException {
+        dbConnection.close();
+        ChatServer.log("Database closed.");
     }
 
 }

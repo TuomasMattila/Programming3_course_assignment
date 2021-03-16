@@ -20,15 +20,21 @@ public class RegistrationHandler implements HttpHandler {
     ChatAuthenticator auth = null;
 
     /**
+     * Handles registration related requests.
      * 
-     * @param authenticator
+     * @param authenticator A {@code ChatAuthenticator} object
      */
     RegistrationHandler(ChatAuthenticator authenticator) {
         auth = authenticator;
     }
 
     /**
+     * Handles registration related requests.
      * 
+     * @param exchange the {@code HttpExchange} containing the request from the
+     * client and used to send the response
+     * @throws IOException if sending response headers fails or if writing to 
+     * the {@code OutputStream} or closing it fails.
      */
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -73,7 +79,7 @@ public class RegistrationHandler implements HttpHandler {
                         }
                     } catch (JSONException e) {
                         code = 400;
-                        responseBody = "JSONException. Registration failed.";
+                        responseBody = "JSONException. Registration failed. " + e.getMessage();
                     }
                 } else {
                     code = 411;
@@ -91,7 +97,7 @@ public class RegistrationHandler implements HttpHandler {
             responseBody = "Server error: " + e.getMessage();
         }
         if (code < 200 || code > 299) {
-            ChatServer.log("Error in /registration: " + code + " " + responseBody);
+            ChatServer.log("---------- Error in /registration: " + code + " " + responseBody);
             byte[] bytes = responseBody.getBytes("UTF-8");
             exchange.sendResponseHeaders(code, bytes.length);
             OutputStream os = exchange.getResponseBody();

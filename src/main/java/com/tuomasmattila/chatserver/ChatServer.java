@@ -31,15 +31,22 @@ import org.json.JSONException;
 public class ChatServer {
 
     /**
+     * A basic https ChatServer for handling POST and GET requests. 
+     * Uses a SQLite database for storing user and message information, 
+     * and {@code BasicAuthenticator} for authenticating users.
      * 
-     * @param args
-     * @throws Exception
+     * 
+     * @param args start-up parameters for the server: 
+     * [0]=database file including the full path to it, 
+     * [1]=certificate including the full path to it and
+     * [2]=certificate's password
+     * @throws Exception if creating {@code SSLContext} fails
      */
     public static void main(String[] args) throws Exception {
         try {
             if (args.length != 3) {
                 log("Missing startup parameters. Server's launch command should be of form: java -jar jar-file.jar dbname.db cert.jks cert-password");
-                return ;
+                return;
             }
             ChatDatabase database = ChatDatabase.getInstance();
             database.open(args[0]);
@@ -72,21 +79,23 @@ public class ChatServer {
                 }
             }
         } catch (FileNotFoundException e) {
-            System.out.println("Certificate not found!");
+            log("Certificate not found! " + e.getMessage());
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         } catch (SQLException e) {
-            System.out.println("Error opening/creating database.");
-            e.printStackTrace();
+            log("Database error: " + e.getMessage());
         } catch (JSONException e) {
             e.printStackTrace();
         }
     }
 
     /**
+     * Creates SSLContext.
      * 
-     * @return
+     * @param keystore certificate file with the full path to it
+     * @param pass password for the certificate
+     * @return SSLContext object
      * @throws KeyStoreException
      * @throws NoSuchAlgorithmException
      * @throws CertificateException
@@ -114,6 +123,7 @@ public class ChatServer {
     }
 
     /**
+     * Used for printing messages to the server's log.
      * 
      * @param message
      */

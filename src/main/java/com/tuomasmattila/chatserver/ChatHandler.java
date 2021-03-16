@@ -24,40 +24,46 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+/**
+ * A Class that handles POST and GET requests from clients. 
+ * This class implements {@code HttpHandler}.
+ */
 public class ChatHandler implements HttpHandler {
 
     private static final DateTimeFormatter httpDateFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss.SSS z", Locale.ENGLISH).withZone(ZoneId.of("GMT"));
 
     /**
-     * 
+     * Handles POST and GET requests from clients.
+
+     * @param exchange the {@code HttpExchange} containing the request from the
+     * client and used to send the response
+     * @throws IOException if sending response headers fails or if 
+     * writing to the {@code OutputStream} or closing it fails.
      */
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        int code = 200;
-        String responseBody = "";
+        Result result = new Result();
+        result.setCode(200);
+        result.setResponse("");
 
         ChatServer.log("Request handled in thread " + Thread.currentThread().getId());
         try {
             if (exchange.getRequestMethod().equalsIgnoreCase("POST")) {
-                code = handleChatMessageFromClient(exchange);
+                result = handleChatMessageFromClient(exchange);
             } else if (exchange.getRequestMethod().equalsIgnoreCase("GET")) {
-                code = handleGetRequestFromClient(exchange);
+                result = handleGetRequestFromClient(exchange);
             } else {
-                code = 400;
-                responseBody = "Not supported.";
+                result.setCode(400);
+                result.setResponse("Not supported.");
             }
         } catch (IOException e) {
-            code = 500;
-            responseBody = "Error in handling the request: " + e.getMessage();
-        } catch (Exception e) {
-            code = 500;
-            responseBody = "Server error: " + e.getMessage();
+            result.setCode(500);
+            result.setResponse("Error in handling the request: " + e.getMessage());
         }
-        //TODO: Print all errors here.
-        if (code < 200 || code > 299) {
-            ChatServer.log("Error in /chat: " + code + " " + responseBody);
-            byte[] bytes = responseBody.getBytes("UTF-8");
-            exchange.sendResponseHeaders(code, bytes.length);
+        if (result.getCode() < 200 || result.getCode() > 299) {
+            ChatServer.log("---------- Error in /chat: " + result.getCode() + " " + result.getResponse());
+            byte[] bytes = result.getResponse().getBytes("UTF-8");
+            exchange.sendResponseHeaders(result.getCode(), bytes.length);
             OutputStream os = exchange.getResponseBody();
             os.write(bytes);
             os.close();
@@ -65,27 +71,29 @@ public class ChatHandler implements HttpHandler {
     }
 
     /**
+     * Handles a POST requests from clients.
      * 
-     * @param exchange
-     * @return
-     * @throws Exception
+     * @param exchange the {@code HttpExchange} containing the request from the
+     * client and used to send the response
+     * @return a {@code Result} object that includes the HTTP status code and a response message.
+     * @throws IOException if {@code InputStream} fails to close or if sending response headers fails
      */
-    private int handleChatMessageFromClient(HttpExchange exchange) throws Exception {
-        int code = 200;
+    private Result handleChatMessageFromClient(HttpExchange exchange) throws IOException {
+        Result result = new Result();
+        result.setCode(200);
         Headers headers = exchange.getRequestHeaders();
         String contentType = "";
-        String responseBody = "";
 
         if (!headers.containsKey("Content-Length")) {
-            code = 411;
-            return code;
+            result.setCode(411);
+            return result;
         }
         if (headers.containsKey("Content-Type")) {
             contentType = headers.get("Content-Type").get(0);
         } else {
-            code = 400;
-            responseBody = "No content type in request.";
-            return code;
+            result.setCode(400);
+            result.setResponse("No content type in request.");
+            return result;
         }
         if (contentType.equalsIgnoreCase("application/json")) {
             InputStream stream = exchange.getRequestBody();
@@ -101,50 +109,56 @@ public class ChatHandler implements HttpHandler {
                     try { 
                         ChatDatabase.getInstance().insertMessage(message);
                         ChatServer.log("New chat message saved.");
-                        exchange.sendResponseHeaders(code, -1);
+                        exchange.sendResponseHeaders(result.getCode(), -1);
                     } catch (SQLException e) {
                         if (e.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")){
-                            ChatServer.log("Error: Sending messages too fast.");
-                            exchange.sendResponseHeaders(429, -1);
+                            result.setResponse("Error: Sending messages too fast. " + e.getMessage());
+                            result.setCode(429);
+                            exchange.sendResponseHeaders(result.getCode(), -1);
+                            return result;
                         } else {
-                            ChatServer.log("Message could not be saved: Database error.");
-                            exchange.sendResponseHeaders(500, -1);
+                            result.setResponse("Message could not be saved: Database error. " + e.getMessage());
+                            result.setCode(500);
+                            exchange.sendResponseHeaders(result.getCode(), -1);
+                            return result;
                         }
                     }
                 } else {
-                    code = 400;
-                    responseBody = "No required content in request.";
-                    ChatServer.log(responseBody);
+                    result.setCode(400);
+                    result.setResponse("No required content in request.");
                 }
             } catch (JSONException e) {
-                code = 400;
-                responseBody = "JSONException. Message was not sent.";
-                ChatServer.log(e.getMessage());
+                result.setCode(400);
+                result.setResponse("JSONException. Message was not sent. " + e.getMessage());
+                return result;
             } catch (DateTimeParseException e) {
-                code = 400;
-                responseBody = "DateTimeParseException. Could not parse date/time. Message was not sent.";
-                ChatServer.log(e.getMessage());
+                result.setCode(400);
+                result.setResponse("DateTimeParseException. Could not parse date/time. Message was not sent. " + e.getMessage());
+                return result;
             }
         } else {
-            code = 411;
-            responseBody = "Content-Type must be application/json.";
-            ChatServer.log(responseBody);
+            result.setCode(411);
+            result.setResponse("Content-Type must be application/json.");
         }
-        return code;
+        return result;
     }
 
     /**
+     * Handles GET requests from clients.
      * 
-     * @param exchange
-     * @return
-     * @throws IOException
-     * @throws SQLException
+     * @param exchange the {@code HttpExchange} containing the request from the
+     * client and used to send the response
+     * @return a {@code Result} object that includes the HTTP status code and 
+     * a response message.
+     * @throws IOException if sending response headers fails or if 
+     * writing to the {@code OutputStream} or closing it fails.
      */
-    private int handleGetRequestFromClient(HttpExchange exchange) throws IOException, SQLException {
-        int code = 200;
+    private Result handleGetRequestFromClient(HttpExchange exchange) throws IOException {
+        Result result = new Result();
+        result.setCode(200);
+        result.setResponse("");
         long messagesSince = -1;
         Headers requestHeaders = exchange.getRequestHeaders();
-        String responseBody = "";
 
         if (requestHeaders.containsKey("If-Modified-Since")) {
             String ifModifiedSince = requestHeaders.getFirst("If-Modified-Since");
@@ -154,25 +168,25 @@ public class ChatHandler implements HttpHandler {
         }
         if (ChatDatabase.getInstance().isEmpty()) {
             ChatServer.log("No new messages to deliver to client.");
-            code = 204;
-            exchange.sendResponseHeaders(code, -1);
-            return code;
+            result.setCode(204);
+            exchange.sendResponseHeaders(result.getCode(), -1);
+            return result;
         }
         ArrayList<ChatMessage> messages = ChatDatabase.getInstance().getMessages(messagesSince);
         if (messages == null) {
-            responseBody = "Database access error.";
-            code = 404;
-            exchange.sendResponseHeaders(code, -1);
-            return code;
+            result.setResponse("Database access error.");
+            result.setCode(404);
+            exchange.sendResponseHeaders(result.getCode(), -1);
+            return result;
         } else if (messages.size() == 0) {
-            responseBody = "No new messages to deliver.";
-            code = 204;
-            exchange.sendResponseHeaders(code, -1);
-            return code;
+            result.setResponse("No new messages to deliver.");
+            result.setCode(204);
+            exchange.sendResponseHeaders(result.getCode(), -1);
+            return result;
         } else {
+            String responseBody = "";
             try {
                 JSONArray jsonArray = new JSONArray();
-                responseBody = "";
                 OffsetDateTime newest = null;
                 for (ChatMessage message : messages) {
                     JSONObject obj = new JSONObject();
@@ -189,16 +203,17 @@ public class ChatHandler implements HttpHandler {
                 headers.add("Last-Modified", datetime);
                 responseBody = jsonArray.toString();
             } catch (JSONException e) {
-                code = 400;
-                responseBody = "JSONException. Could not get messages.";
+                result.setCode(400);
+                result.setResponse("JSONException. Could not get messages.");
+                return result;
             }
             ChatServer.log("Delivering " + messages.size() + " messages to client.");
             byte[] bytes = responseBody.toString().getBytes("UTF-8");
-            exchange.sendResponseHeaders(code, bytes.length);
+            exchange.sendResponseHeaders(result.getCode(), bytes.length);
             OutputStream os = exchange.getResponseBody();
             os.write(bytes);
             os.close();
-            return code;
+            return result;
         }
     }
 
