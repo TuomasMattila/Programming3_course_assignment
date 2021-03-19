@@ -168,7 +168,7 @@ public class ChatDatabase {
     }
 
     /**
-     * Method for inserting a message to the database
+     * Inserts a message to the database
      * 
      * @param message A {@code ChatMessage} object to be inserted into the database
      * @throws SQLException if a database access error occurs or this method 
@@ -185,7 +185,7 @@ public class ChatDatabase {
     }
 
     /**
-     * Method for getting messages from the database.
+     * Gets messages from the database.
      * 
      * @param since {@code long} int that defines the timestamp from which point onwards this 
      * method should get the messages. If -1, this method returns the last 20 messages
@@ -224,7 +224,7 @@ public class ChatDatabase {
     }
 
     /**
-     * Method that returns the number of messages stored in the database.
+     * Returns the number of messages stored in the database.
      * 
      * @return the number of messages in the database or 0 if an exception occurs
      */
