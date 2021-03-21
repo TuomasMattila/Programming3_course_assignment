@@ -64,6 +64,8 @@ public class ChatServer {
             HttpContext chatContext = server.createContext("/chat", new ChatHandler());
             chatContext.setAuthenticator(auth);
             server.createContext("/registration", new RegistrationHandler(auth));
+            HttpContext channelContext = server.createContext("/channels", new ChannelHandler());
+            channelContext.setAuthenticator(auth);
             ExecutorService cachedThreadPool = Executors.newCachedThreadPool();
             server.setExecutor(cachedThreadPool);
             server.start();

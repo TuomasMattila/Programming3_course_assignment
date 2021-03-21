@@ -46,7 +46,7 @@ public class ChatHandler implements HttpHandler {
         result.setCode(200);
         result.setResponse("");
 
-        ChatServer.log("Request handled in thread " + Thread.currentThread().getId());
+        ChatServer.log("/chat: Request handled in thread " + Thread.currentThread().getId());
         try {
             if (exchange.getRequestMethod().equalsIgnoreCase("POST")) {
                 result = handleChatMessageFromClient(exchange);
@@ -57,6 +57,9 @@ public class ChatHandler implements HttpHandler {
                 result.setResponse("Not supported.");
             }
         } catch (IOException e) {
+            result.setCode(500);
+            result.setResponse("Error in handling the request: " + e.getMessage());
+        } catch (SQLException e) {
             result.setCode(500);
             result.setResponse("Error in handling the request: " + e.getMessage());
         }
@@ -98,31 +101,27 @@ public class ChatHandler implements HttpHandler {
         if (contentType.equalsIgnoreCase("application/json")) {
             InputStream stream = exchange.getRequestBody();
             String text = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).lines().collect(Collectors.joining("\n"));
-            ChatServer.log(text);
             stream.close();
             try {
                 JSONObject obj = new JSONObject(text);
+                if (!obj.has("channel")) {
+                    obj.put("channel", "default");
+                } else {
+                    ArrayList<String> channels = ChatDatabase.getInstance().getChannels();
+                    if (!channels.contains(obj.getString("channel"))) {
+                        result.setCode(400);
+                        result.setResponse("Error: channel name is not valid.");
+                        return result;
+                    }
+                }
                 String dateStr = obj.getString("sent");
                 OffsetDateTime odt = OffsetDateTime.parse(dateStr);
-                ChatMessage message = new ChatMessage(odt, obj.getString("user"), obj.getString("message"));
-                if (message.getNick().length() > 0 && message.getMessage().length() > 0 && message.getSent().toString().length() > 0) {
-                    try { 
+                ChatMessage message = new ChatMessage(odt, obj.getString("user"), obj.getString("message"), obj.getString("channel"));
+                ChatServer.log(message.getChatMessageAsString());
+                if (message.getNick().length() > 0 && message.getMessage().length() > 0 && message.getSent().toString().length() > 0 && message.getChannel().length() > 0) {
                         ChatDatabase.getInstance().insertMessage(message);
                         ChatServer.log("New chat message saved.");
-                        exchange.sendResponseHeaders(result.getCode(), -1);
-                    } catch (SQLException e) {
-                        if (e.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")){
-                            result.setResponse("Error: Sending messages too fast. " + e.getMessage());
-                            result.setCode(429);
-                            exchange.sendResponseHeaders(result.getCode(), -1);
-                            return result;
-                        } else {
-                            result.setResponse("Message could not be saved: Database error. " + e.getMessage());
-                            result.setCode(500);
-                            exchange.sendResponseHeaders(result.getCode(), -1);
-                            return result;
-                        }
-                    }
+                        exchange.sendResponseHeaders(result.getCode(), -1); 
                 } else {
                     result.setCode(400);
                     result.setResponse("No required content in request.");
@@ -135,6 +134,25 @@ public class ChatHandler implements HttpHandler {
                 result.setCode(400);
                 result.setResponse("DateTimeParseException. Could not parse date/time. Message was not sent. " + e.getMessage());
                 return result;
+            } catch (SQLException e) {
+                // TODO: delete later?
+                if (e.getMessage().contains("channels.name")) {
+                    result.setResponse("Error: channel name is not valid. " + e.getMessage());
+                    result.setCode(400);
+                    exchange.sendResponseHeaders(result.getCode(), -1);
+                    return result;
+                }
+                if (e.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")) {
+                    result.setResponse("Error: Sending messages too fast. " + e.getMessage());
+                    result.setCode(429);
+                    exchange.sendResponseHeaders(result.getCode(), -1);
+                    return result;
+                } else {
+                    result.setResponse("Message could not be saved: Database error. " + e.getMessage());
+                    result.setCode(500);
+                    exchange.sendResponseHeaders(result.getCode(), -1);
+                    return result;
+                }
             }
         } else {
             result.setCode(411);
@@ -144,24 +162,36 @@ public class ChatHandler implements HttpHandler {
     }
 
     /**
-     * Handles GET requests from clients.
+     * Handles GET requests from clients. If the channel is not specified in the
+     * request (there is no "Channel" -header in the request), the user will be given
+     * the messages from the default channel.
      * 
      * @param exchange the {@code HttpExchange} containing the request from the
      * client and used to send the response
      * @return a {@code Result} object that includes the HTTP status code and 
-     * a response message.
+     * a response message
      * @throws IOException if sending response headers fails or if 
-     * writing to the {@code OutputStream} or closing it fails.
+     * writing to the {@code OutputStream} or closing it fails
      */
-    private Result handleGetRequestFromClient(HttpExchange exchange) throws IOException {
+    private Result handleGetRequestFromClient(HttpExchange exchange) throws IOException, SQLException {
         Result result = new Result();
         result.setCode(200);
         result.setResponse("");
         long messagesSince = -1;
-        Headers requestHeaders = exchange.getRequestHeaders();
+        String channel = "default";
+        Headers headers = exchange.getRequestHeaders();
 
-        if (requestHeaders.containsKey("If-Modified-Since")) {
-            String ifModifiedSince = requestHeaders.getFirst("If-Modified-Since");
+        if (headers.containsKey("Channel")) {
+            channel = headers.getFirst("Channel");
+            ArrayList<String> channels = ChatDatabase.getInstance().getChannels();
+            if (!channels.contains(channel)) {
+                result.setCode(400);
+                result.setResponse("Error: requested channel is not valid.");
+                return result;
+            }
+        }
+        if (headers.containsKey("If-Modified-Since")) {
+            String ifModifiedSince = headers.getFirst("If-Modified-Since");
             ZonedDateTime zdt = ZonedDateTime.parse(ifModifiedSince, httpDateFormatter);
             OffsetDateTime fromWhichDate = zdt.toOffsetDateTime();
             messagesSince = fromWhichDate.toInstant().toEpochMilli();
@@ -172,7 +202,7 @@ public class ChatHandler implements HttpHandler {
             exchange.sendResponseHeaders(result.getCode(), -1);
             return result;
         }
-        ArrayList<ChatMessage> messages = ChatDatabase.getInstance().getMessages(messagesSince);
+        ArrayList<ChatMessage> messages = ChatDatabase.getInstance().getMessages(messagesSince, channel);
         if (messages == null) {
             result.setResponse("Database access error.");
             result.setCode(404);
@@ -193,14 +223,15 @@ public class ChatHandler implements HttpHandler {
                     obj.put("sent", message.getSent());
                     obj.put("user", message.getNick());
                     obj.put("message", message.getMessage());
+                    obj.put("channel", message.getChannel());
                     if (newest == null || newest.isBefore(message.getSent())) {
                         newest = message.getSent();
                     }
                     jsonArray.put(obj);
                 }
                 String datetime = newest.format(httpDateFormatter);
-                Headers headers = exchange.getResponseHeaders();
-                headers.add("Last-Modified", datetime);
+                Headers responseHeaders = exchange.getResponseHeaders();
+                responseHeaders.add("Last-Modified", datetime);
                 responseBody = jsonArray.toString();
             } catch (JSONException e) {
                 result.setCode(400);

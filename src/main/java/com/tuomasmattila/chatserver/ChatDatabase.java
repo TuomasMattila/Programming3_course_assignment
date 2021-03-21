@@ -83,7 +83,9 @@ public class ChatDatabase {
     public void initializeDatabase(Connection dbConnection) throws SQLException {
             Statement createStatement = dbConnection.createStatement();
             createStatement.execute("create table users (username varchar(50) PRIMARY KEY, password varchar(100) NOT NULL, salt varchar(100) NOT NULL, email varchar(100) NOT NULL)");
-            createStatement.execute("create table messages (user varchar(50) NOT NULL, message varchar(255) NOT NULL, sent integer NOT NULL, PRIMARY KEY(user, sent), FOREIGN KEY(user) REFERENCES users(username))");
+            createStatement.execute("create table messages (user varchar(50) NOT NULL, message varchar(255) NOT NULL, sent integer NOT NULL, channel varchar(50) DEFAULT 'default', PRIMARY KEY(user, sent), FOREIGN KEY(user) REFERENCES users(username), FOREIGN KEY(channel) REFERENCES channels(name))");
+            createStatement.execute("create table channels (name varchar(50) PRIMARY KEY)");
+            createStatement.executeUpdate("insert into channels values ('default')");
             createStatement.close();
             ChatServer.log("Database successfully initialized.");
     }
@@ -177,7 +179,7 @@ public class ChatDatabase {
     public void insertMessage(ChatMessage message) throws SQLException{
         String msg = message.getMessage();
         msg = msg.replaceAll("\"", "''"); // Handles quotes
-        String insert = "insert into messages values (\"" + message.getNick() + "\", \"" + msg + "\", " + message.dateAsInt() + ")";
+        String insert = "insert into messages values (\"" + message.getNick() + "\", \"" + msg + "\", " + message.dateAsInt() + ", \"" + message.getChannel() + "\")";
 
         Statement insertStatement = dbConnection.createStatement();
         insertStatement.executeUpdate(insert);
@@ -189,15 +191,16 @@ public class ChatDatabase {
      * 
      * @param since {@code long} int that defines the timestamp from which point onwards this 
      * method should get the messages. If -1, this method returns the last 20 messages
+     * @param channel the name of the channel as a {@code String}
      * @return messages in an {@code ArrayList<ChatMessage>} or {@code null} if an 
      * exception occurs
      */
-    public ArrayList<ChatMessage> getMessages(long since) {
+    public ArrayList<ChatMessage> getMessages(long since, String channel) {
         String query = "";
         if (since != -1) {
-            query = "select * from messages where sent > " + since + " order by sent asc";
+            query = "SELECT * FROM messages WHERE sent > " + since + " AND channel = \"" + channel + "\" order by sent asc";
         } else {
-            query = "select * from (select * from messages order by sent desc limit 20) order by sent asc";
+            query = "SELECT * FROM (SELECT * FROM messages WHERE channel =\"" + channel + "\" ORDER BY sent DESC LIMIT 20) ORDER BY sent ASC";
         }
         try {
             Statement queryStatement = dbConnection.createStatement();
@@ -212,6 +215,7 @@ public class ChatDatabase {
                     message.setNick(rs.getString("user"));
                     message.setMessage(rs.getString("message"));
                     message.setSent(rs.getLong("sent"));
+                    message.setChannel(rs.getString("channel"));
                     messages.add(message);
                 }
                 queryStatement.close();
@@ -274,6 +278,45 @@ public class ChatDatabase {
     public void close() throws SQLException {
         dbConnection.close();
         ChatServer.log("Database closed.");
+    }
+
+    /**
+     * Creates a new channel into the database.
+     * 
+     * @param channelName the name of the channel to be created as a {@code String}
+     * @throws SQLException if a database access error occurs
+     */
+    public void createChannel(String channelName) throws SQLException {
+        String insert = "insert into channels values (\"" + channelName + "\")";
+
+        Statement insertStatement = dbConnection.createStatement();
+        insertStatement.executeUpdate(insert);
+        insertStatement.close();
+    }
+
+    /**
+     * Returns a list of existing channels in the database.
+     * 
+     * @return an {@code ArrayList<String>} of the channels' names
+     * @throws SQLException if a database access error occurs
+     */
+    public ArrayList<String> getChannels() throws SQLException {
+        String query = "select * from channels";
+
+        Statement queryStatement = dbConnection.createStatement();
+        ResultSet rs = queryStatement.executeQuery(query);
+        if (rs == null) {
+            queryStatement.close();
+            return null;
+        } else {
+            ArrayList<String> channels = new ArrayList<>();
+            while (rs.next()) {
+                String channel = rs.getString("name");
+                channels.add(channel);
+            }
+            queryStatement.close();
+            return channels;
+        }
     }
 
 }

@@ -15,17 +15,20 @@ public class ChatMessage {
     private OffsetDateTime sent;
     private String nick;
     private String message;
+    private String channel;
 
     public ChatMessage() {
         this.nick = "";
         this.message = "";
         this.sent = null;
+        this.channel = "";
     }
 
-    public ChatMessage(OffsetDateTime sent, String nick, String message) {
+    public ChatMessage(OffsetDateTime sent, String nick, String message, String channel) {
         this.nick = nick;
         this.message = message;
         this.sent = sent;
+        this.channel = channel;
     }
 
     /**
@@ -68,6 +71,18 @@ public class ChatMessage {
 
     public String getMessage() {
         return this.message;
+    }
+
+    public String getChannel() {
+        return channel;
+    }
+
+    public void setChannel(String channel) {
+        this.channel = channel;
+    }
+
+    public String getChatMessageAsString() {
+        return "Nick: " + this.nick + " Message: " + this.message + " Sent: " + this.sent.toString() + " Channel: " + this.channel;
     }
 
 }
