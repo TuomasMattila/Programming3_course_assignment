@@ -135,22 +135,13 @@ public class ChatHandler implements HttpHandler {
                 result.setResponse("DateTimeParseException. Could not parse date/time. Message was not sent. " + e.getMessage());
                 return result;
             } catch (SQLException e) {
-                // TODO: delete later?
-                if (e.getMessage().contains("channels.name")) {
-                    result.setResponse("Error: channel name is not valid. " + e.getMessage());
-                    result.setCode(400);
-                    exchange.sendResponseHeaders(result.getCode(), -1);
-                    return result;
-                }
                 if (e.getMessage().contains("SQLITE_CONSTRAINT_PRIMARYKEY")) {
                     result.setResponse("Error: Sending messages too fast. " + e.getMessage());
                     result.setCode(429);
-                    exchange.sendResponseHeaders(result.getCode(), -1);
                     return result;
                 } else {
                     result.setResponse("Message could not be saved: Database error. " + e.getMessage());
                     result.setCode(500);
-                    exchange.sendResponseHeaders(result.getCode(), -1);
                     return result;
                 }
             }

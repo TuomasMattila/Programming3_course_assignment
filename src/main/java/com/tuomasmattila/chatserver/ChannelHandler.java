@@ -14,6 +14,7 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 public class ChannelHandler implements HttpHandler {
@@ -74,6 +75,8 @@ public class ChannelHandler implements HttpHandler {
         result.setCode(200);
         result.setResponse("");
         String contentType = "";
+        JSONObject obj = null;
+        String channel = "";
 
         if (!headers.containsKey("Content-Length")) {
             result.setCode(411);
@@ -91,11 +94,28 @@ public class ChannelHandler implements HttpHandler {
             String text = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).lines().collect(Collectors.joining("\n"));
             ChatServer.log(text);
             stream.close();
-            JSONObject obj = new JSONObject(text);
-            String channel = obj.getString("channel name");
+            try {
+                obj = new JSONObject(text);
+                channel = obj.getString("channel name");
+            } catch (JSONException e) {
+                result.setCode(400);
+                result.setResponse("JSONException. Channel was not created. " + e.getMessage());
+                return result;
+            }
+            ArrayList<String> channels = ChatDatabase.getInstance().getChannels();
+            if (channels.contains(channel)) {
+                result.setCode(400);
+                result.setResponse("Error: invalid channel name.");
+                return result;
+            }
             ChatDatabase.getInstance().createChannel(channel);
-            ChatServer.log("New channel created.");
-            exchange.sendResponseHeaders(result.getCode(), -1);
+            result.setResponse("New channel called \"" + channel + "\" created.");
+            ChatServer.log(result.getResponse());
+            byte[] bytes = result.getResponse().getBytes("UTF-8");
+            exchange.sendResponseHeaders(result.getCode(), bytes.length);
+            OutputStream os = exchange.getResponseBody();
+            os.write(bytes);
+            os.close();
         } else {
             result.setCode(411);
             result.setResponse("Content-Type must be application/json.");
