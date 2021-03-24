@@ -8,7 +8,7 @@ Explanation of the advanced feature implemented:
 Feature: User can post messages to multiple chat channels
 
 User can create a new channel by making a POST request to the /channels -realm.
-The channel's name must be in JSON format, fro example:
+The channel's name must be in JSON format, for example:
 {
     "channel name" : "New Channel"
 }
