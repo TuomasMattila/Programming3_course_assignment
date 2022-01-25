@@ -1,7 +1,5 @@
 # Programming3_course_assignment
-Repository for the course assignment of the course Programming 3.
-
-Tuomas Veikka Mattila 2587521 tuomas.mattila@windowslive.com
+Chat server that allows sending messages to different channels and has a SQL database system for storing information.
 
 Explanation of the advanced feature implemented:
 
